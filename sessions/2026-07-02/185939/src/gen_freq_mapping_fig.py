@@ -90,15 +90,8 @@ for e in entries:
         selected.append(e)
 
 # ---------------------------------------------------------------------------
-# 3. THE MAIN FIGURE: two-panel layout
+# Shared helpers
 # ---------------------------------------------------------------------------
-fig = plt.figure(figsize=(28, 14))
-
-# --- LEFT HALF: Input thumbnails + DC/High bars, sorted ---
-gs_left = fig.add_gridspec(len(selected), 3, left=0.02, right=0.48,
-                            hspace=0.15, wspace=0.15)
-
-# Category colors
 def cat_color(name):
     if 'noise' in name: return '#E74C3C'
     if 'solid' in name: return '#95A5A6'
@@ -125,90 +118,114 @@ def cat_label(name):
     if 'shape' in name or 'random_dots' in name: return '形状'
     return '其他'
 
-for i, e in enumerate(selected):
-    row = i
+# ---------------------------------------------------------------------------
+# 3a. FIGURE 5a — HORIZONTAL GRID: Input thumbnails + bars, sorted by DC
+# ---------------------------------------------------------------------------
+N = len(selected)
+COLS = 7
+ROWS = (N + COLS - 1) // COLS
 
-    # Thumbnail
-    ax_img = fig.add_subplot(gs_left[row, 0])
+# cell dimensions
+CELL_W = 1.9   # thumbnail width in inches
+CELL_H = 1.9   # thumbnail + bar height
+BAR_H = 0.18   # bar height fraction per cell
+
+fig5a = plt.figure(figsize=(COLS * CELL_W + 1.5, ROWS * (CELL_H + 0.25) + 1.0))
+
+for idx, e in enumerate(selected):
+    r = idx // COLS
+    c = idx % COLS
+
+    left = 0.08 + c * (CELL_W + 0.06) / (COLS * CELL_W + 1.5)
+    bottom = 1.0 - (r + 1) * (CELL_H + 0.25) / (ROWS * (CELL_H + 0.25) + 1.0) - 0.02
+    width = CELL_W / (COLS * CELL_W + 1.5)
+    height = CELL_H / (ROWS * (CELL_H + 0.25) + 1.0)
+
+    # Thumbnail area (upper 85% of cell)
+    ax_img = fig5a.add_axes([left, bottom + height * BAR_H, width, height * (1 - BAR_H)])
     img_path = os.path.join(INPUT_DIR, f"{e['name']}.png")
     if os.path.exists(img_path):
         img = Image.open(img_path)
-        ax_img.imshow(img)
-    ax_img.set_ylabel(f"{e['name'][:22]}", fontsize=6, labelpad=2,
-                      color=cat_color(e['name']), fontweight='bold',
-                      ha='right', va='center', rotation=0)
-    ax_img.yaxis.set_label_position("right")
+        ax_img.imshow(img, aspect='auto')
+    # Category label
+    ax_img.text(3, 8, cat_label(e['name']), fontsize=5.5, fontweight='bold',
+                color='white', ha='left', va='top',
+                bbox=dict(boxstyle='round,pad=0.15', facecolor=cat_color(e['name']), alpha=0.82))
+    # Name below category
+    ax_img.text(3, 26, e['name'][:22].replace('_', ' '), fontsize=4.8,
+                color='white', ha='left', va='top', alpha=0.9)
     ax_img.set_xticks([])
     ax_img.set_yticks([])
 
-    # DC/High bar
-    ax_bar = fig.add_subplot(gs_left[row, 1:])
+    # DC/High bar (lower 15% of cell)
+    ax_bar = fig5a.add_axes([left, bottom, width, height * BAR_H])
     dc_pct = e['dc'] * 100
     high_pct = e['high'] * 100
-    ax_bar.barh(0, dc_pct, color='#4472C4', alpha=0.85, label='DC (均匀)')
-    ax_bar.barh(0, high_pct, left=dc_pct, color='#ED7D31', alpha=0.85,
-                label='高频 (细节)')
+    ax_bar.barh(0, dc_pct, color='#4472C4', alpha=0.88, height=0.8)
+    ax_bar.barh(0, high_pct, left=dc_pct, color='#ED7D31', alpha=0.88, height=0.8)
     ax_bar.set_xlim(0, 100)
-    ax_bar.set_ylim(-0.6, 0.6)
+    ax_bar.set_ylim(-0.5, 0.5)
     ax_bar.axis('off')
+    # tiny text: DC% and High%
+    ax_bar.text(2, 0, f'{dc_pct:.0f}%', fontsize=4.2, color='white', va='center', fontweight='bold')
+    ax_bar.text(96, 0, f'{high_pct:.0f}%', fontsize=4.2, color='white', va='center', ha='right', fontweight='bold')
 
-    # Category tag
-    ax_bar.text(101, 0, cat_label(e['name']), fontsize=5.5, va='center',
-                color=cat_color(e['name']), fontweight='bold')
+    # First cell: show legend for bars
+    if idx == 0:
+        ax_bar.text(15, 0.8, 'DC (均匀)', fontsize=4.5, color='#4472C4', fontweight='bold', va='bottom')
+        ax_bar.text(55, 0.8, '高频 (细节)', fontsize=4.5, color='#ED7D31', fontweight='bold', va='bottom')
 
-    if i == 0:
-        ax_bar.text(10, 0.75, 'DC (低频/均匀)', fontsize=7, color='#4472C4',
-                    fontweight='bold', transform=ax_bar.transData)
-        ax_bar.text(70, 0.75, '高频 (细节/结构)', fontsize=7, color='#ED7D31',
-                    fontweight='bold', transform=ax_bar.transData)
+fig5a.suptitle('瓶颈频域特征与输入图像的关系\n'
+               '按 DC 比率从低到高排列：左上 = 结构最丰富（自然图像），右下 = 最均匀（周期信号/纯色）',
+               fontsize=11, fontweight='bold', y=0.995)
 
-# --- RIGHT HALF: Spectra overlay ---
-ax_right = fig.add_axes([0.55, 0.08, 0.42, 0.88])
+fig5a.savefig(os.path.join(OUT_DIR, "fig5a_input_thumbnail_grid.png"),
+              dpi=180, bbox_inches='tight', facecolor='white')
+plt.close(fig5a)
+print("[*] Fig5a: Horizontal thumbnail grid saved.")
 
-# Draw spectra for each selected entry, color-coded by DC ratio
+# ---------------------------------------------------------------------------
+# 3b. FIGURE 5b — SPECTRA OVERLAY (standalone)
+# ---------------------------------------------------------------------------
+fig5b, ax = plt.subplots(figsize=(14, 8))
+
 for e in selected:
     spec = e['spec']
     freqs = np.arange(len(spec))
-    # Color: low DC = red/warm (rich structure), high DC = blue/cool (uniform)
-    dc_norm = (e['dc'] - 0.42) / (0.80 - 0.42)  # normalize to observed range
+    dc_norm = (e['dc'] - 0.42) / (0.80 - 0.42)
     dc_norm = np.clip(dc_norm, 0, 1)
     color = plt.cm.RdYlBu_r(dc_norm)
-    ax_right.loglog(freqs[1:], spec[1:], color=color, linewidth=1.2,
-                    alpha=0.8, label=f"{e['name'][:25]} (DC={e['dc']*100:.0f}%)")
+    ax.loglog(freqs[1:], spec[1:], color=color, linewidth=1.3,
+              alpha=0.85, label=f"{e['name'][:25]} (DC={e['dc']*100:.0f}%)")
 
-# DC ratio colorbar
 sm = plt.cm.ScalarMappable(cmap=plt.cm.RdYlBu_r, norm=plt.Normalize(0.42, 0.80))
 sm.set_array([])
-cbar = plt.colorbar(sm, ax=ax_right, shrink=0.6, pad=0.02)
-cbar.set_label('DC Ratio (低=暖色/结构丰富, 高=冷色/均匀平滑)', fontsize=8)
+cbar = plt.colorbar(sm, ax=ax, shrink=0.7, pad=0.02)
+cbar.set_label('DC Ratio (低=暖色/结构丰富  →  高=冷色/均匀平滑)', fontsize=9)
 
-ax_right.set_xlabel('Spatial Frequency (radial bin)', fontsize=10)
-ax_right.set_ylabel('Power (log scale)', fontsize=10)
-ax_right.set_title('Bottleneck Radial Power Spectra\nColor = DC Ratio: '
-                   'warm → structured input, cool → uniform input',
-                   fontsize=10, fontweight='bold')
-ax_right.grid(True, alpha=0.2)
+ax.set_xlabel('Spatial Frequency (radial bin)', fontsize=11)
+ax.set_ylabel('Power (log scale)', fontsize=11)
+ax.set_title('Bottleneck Radial Power Spectra\n'
+             '颜色 = DC 比率: 暖色(低DC) = 结构丰富的输入, 冷色(高DC) = 均匀/周期性的输入',
+             fontsize=12, fontweight='bold')
+ax.grid(True, alpha=0.2)
 
-# Key annotations on the spectra plot
-ax_right.annotate('自然图像\n边缘/轮廓\n复杂形状',
-                   xy=(1.2, 1e-1), fontsize=8, color='#C0392B', fontweight='bold',
-                   bbox=dict(boxstyle='round,pad=0.3', facecolor='#FFEAA7', alpha=0.8))
-ax_right.annotate('噪声\n纹理',
-                   xy=(2.5, 2e-2), fontsize=8, color='#E67E22', fontweight='bold',
-                   bbox=dict(boxstyle='round,pad=0.3', facecolor='#FDEBD0', alpha=0.8))
-ax_right.annotate('纯色\n周期图案\n渐变',
-                   xy=(3.5, 5e-3), fontsize=8, color='#2C3E50', fontweight='bold',
-                   bbox=dict(boxstyle='round,pad=0.3', facecolor='#D5DBDB', alpha=0.8))
+# Annotations
+ax.annotate('自然图像 / 边缘 / 轮廓\n(不可预测 → 保留高频)',
+            xy=(1.2, 1.5e-1), fontsize=9, color='#C0392B', fontweight='bold',
+            bbox=dict(boxstyle='round,pad=0.3', facecolor='#FFEAA7', alpha=0.8))
+ax.annotate('噪声 / 纹理\n(中等)',
+            xy=(2.5, 3e-2), fontsize=9, color='#E67E22', fontweight='bold',
+            bbox=dict(boxstyle='round,pad=0.3', facecolor='#FDEBD0', alpha=0.8))
+ax.annotate('纯色 / 周期图案 / 渐变\n(可预测 → 被强力平滑)',
+            xy=(3.3, 8e-3), fontsize=9, color='#2C3E50', fontweight='bold',
+            bbox=dict(boxstyle='round,pad=0.3', facecolor='#D5DBDB', alpha=0.8))
 
-plt.suptitle('瓶颈频域特征与输入图像的关系\n'
-             '左侧: 输入缩略图 + DC/高频能量比 (按DC从低到高排列)  |  '
-             '右侧: 对应瓶颈径向功率谱 (暖色=结构丰富, 冷色=均匀)',
-             fontsize=12, fontweight='bold', y=0.99)
-
-plt.savefig(os.path.join(OUT_DIR, "fig5_input_to_frequency_mapping.png"),
-            dpi=150, bbox_inches='tight', facecolor='white')
-plt.close()
-print("[*] Fig5: Input-to-frequency mapping saved.")
+fig5b.tight_layout()
+fig5b.savefig(os.path.join(OUT_DIR, "fig5b_spectra_overlay.png"),
+              dpi=150, bbox_inches='tight', facecolor='white')
+plt.close(fig5b)
+print("[*] Fig5b: Spectra overlay saved.")
 
 # ---------------------------------------------------------------------------
 # 4. SUPPLEMENTARY: the "predictability" scatter plot

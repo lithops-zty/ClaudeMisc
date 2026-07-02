@@ -28,6 +28,22 @@
 
 ### 1.2 分析方法
 
+> ⚠️ **重要澄清**：FFT 不是直接对原图做的。FFT 的输入是 UNet 瓶颈处 CNN 输出的 **特征图（feature map）**——1280 个通道 × 8×8 空间网格。所谓"高频"指的是特征图上的高频空间变化，而非原图像素的高频。
+
+![FFT输入链路](report/fig7_fft_input_chain.png)
+
+**完整数据流**：
+```
+原始图像 (512×512×3)
+    ↓ VAE encode
+Latent (64×64×4)
+    ↓ UNet down blocks (卷积+注意力+下采样)
+Bottleneck Feature Map (1280ch × 8×8)  ← ★ FFT 的输入
+    ↓ 逐通道 2D FFT → 幅度谱 (每通道 8×8)
+    ↓ 径向平均 → 跨通道均值
+1D 径向功率谱 P(k)  ← ★ 我们分析的"频域特征"
+```
+
 1. **编码**: 输入图像 (512×512) → VAE 编码器 → latent (4×64×64)
 2. **UNet 前向**: latent → UNet (timestep=500, 空文本条件) → 提取各层特征
 3. **FFT 分析**: 对每层特征图的每个通道做 2D FFT，计算径向平均功率谱
@@ -142,9 +158,13 @@ solid_gray_50 68.7%     48.3%    ← 最低DC（中间灰度）
 
 ### 3.1 一目了然：输入 → 频域响应映射
 
-![输入到频域映射](report/fig5_input_to_frequency_mapping.png)
+![输入缩略图网格](report/fig5a_input_thumbnail_grid.png)
 
-**看图方法**：左侧按瓶颈 DC 比率从低到高排列输入图像 + 蓝/橙能量条，右侧为对应的瓶颈径向功率谱。暖色曲线 = 结构丰富的输入（低 DC），冷色曲线 = 均匀/周期性的输入（高 DC）。
+**看图方法**：21 种输入按瓶颈 DC 比率从低到高排列（左上 = 结构最丰富，右下 = 最均匀）。每张缩略图下方的蓝/橙条分别表示 DC（均匀）和高频（细节）占比。类别标签叠加在缩略图左上角。
+
+![瓶颈径向功率谱](report/fig5b_spectra_overlay.png)
+
+**看图方法**：对应上图 21 种输入的瓶颈径向功率谱。暖色 = 低 DC（结构丰富），冷色 = 高 DC（均匀）。暖色曲线集中在左上方（功率更高、衰减更慢），冷色曲线集中在右下方。
 
 ### 3.2 🔴 高频（低 DC）→ 三种输入特征
 
@@ -334,8 +354,11 @@ sine_freq8_ang0     最低      中频正弦被最强衰减
 | 频谱对比 | `spectra_comparison.png` | 6 面板对比：频谱叠加、分类、高低频比、代表频谱、斜率、timestep |
 | 频域能量分布 | `frequency_energy_distribution.png` | 各输入的低/中/高频能量堆叠图 + DC 主导度 |
 | 输入-瓶颈相关性 | `input_vs_bottleneck_correlation.png` | 12 种关键输入的输入图像 FFT vs 瓶颈 FFT 对比 |
-| **★ 输入→频域映射** | `report/fig5_input_to_frequency_mapping.png` | **核心图**：21 种输入缩略图 + DC/高频能量条 + 瓶颈径向谱，直观展示"什么输入→什么频域响应" |
+| **★ 输入缩略图网格** | `report/fig5a_input_thumbnail_grid.png` | **核心图**：21 种输入横向网格排列，缩略图 + DC/高频能量条，按 DC 从低到高排序 |
+| **★ 瓶颈频谱叠加** | `report/fig5b_spectra_overlay.png` | **核心图**：瓶颈径向功率谱叠加，颜色编码 DC 比率，直观展示不同输入类型的频谱分化 |
 | **★ 可预测性散点** | `report/fig6_predictability_vs_dc.png` | **核心图**：输入频谱熵 vs 瓶颈 DC 比率，揭示"不可预测性"才是决定瓶颈响应的关键 |
+| **★ FFT输入链路** | `report/fig7_fft_input_chain.png` | **核心图**：12 种输入的原图 → down_0 特征图 → 瓶颈特征图 → 2D FFT 幅度谱，并排展示 FFT 的真实输入 |
+| Astronaut详解 | `report/fig8_astronaut_fft_detail.png` | 以 astronaut 为例，展示特征图、逐通道频谱、平均频谱、数据流说明 |
 | 多分辨率演变 | `report/fig1_multiresolution_evolution.png` | 6 个 UNet 层级的频谱演变 |
 | 类别对比 | `report/fig2_category_comparison.png` | 瓶颈处各类别的 DC/高频/熵/跨层 DC 演变 |
 | Timestep 演变 | `report/fig3_timestep_evolution.png` | 7 种输入在 5 个 timestep 下的频谱变化 |
